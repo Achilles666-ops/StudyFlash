@@ -14,6 +14,17 @@ interface DiagnosticError {
 const SUBJECTS = ["Biology", "Chemistry", "Physics", "Mathematics", "Engineering", "Law", "Business", "History", "Computer Science", "Medicine", "Other"];
 
 const getApiUrl = (endpoint: string) => {
+    if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        const port = window.location.port;
+        // If we are on cloudflare, github pages, or local dev port (like 5173), target the main Cloud Run Express backend
+        if (hostname.includes('workers.dev') || 
+            hostname.includes('pages.dev') || 
+            hostname.includes('github.io') || 
+            (hostname === 'localhost' && port !== '3000')) {
+            return `https://studyflash-304586748698.asia-east1.run.app${endpoint}`;
+        }
+    }
     return endpoint;
 };
 
