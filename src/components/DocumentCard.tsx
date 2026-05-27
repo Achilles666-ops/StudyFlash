@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Document } from '../types';
 import { Link } from 'react-router-dom';
 
-export const DocumentCard = ({ doc: document, onDelete }: { doc: Document, onDelete: (id: string) => void }) => {
+export const DocumentCard: React.FC<{ doc: Document, onDelete: (id: string) => void }> = ({ doc: document, onDelete }) => {
     const [mastery, setMastery] = useState(0);
     const [isEditing, setIsEditing] = useState(false);
     const [fileName, setFileName] = useState(document.fileName);

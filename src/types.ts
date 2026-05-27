@@ -5,8 +5,34 @@ export interface Document {
   fileUrl: string;
   subject: string;
   type: 'pdf' | 'image';
-  pageCount: number;
+  pageCount?: number;
   status: 'processing' | 'ready' | 'failed';
   flashcardCount: number;
   uploadedAt: any; // Firestore timestamp
+}
+
+export interface Flashcard {
+  id: string;
+  documentId: string;
+  userId: string;
+  question: string;
+  answer: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  lastRating: 'review_again' | 'almost' | 'got_it' | null;
+  ratedAt?: any;
+}
+
+export interface SummarySection {
+  heading: string;
+  bullets: string[];
+}
+
+export interface SummaryNote {
+  id: string;
+  documentId: string;
+  userId: string;
+  sections?: SummarySection[];
+  keyTerms?: string[];
+  estimatedReadMins?: number;
+  generatedAt?: any;
 }

@@ -2,6 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './components/AuthProvider';
 import { Layout } from './components/Layout';
@@ -9,6 +10,7 @@ import { Dashboard } from './components/Dashboard';
 import { Upload } from './components/Upload';
 import { Library } from './components/Library';
 import { Login } from './components/Login';
+import { Study } from './components/Study';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -27,6 +29,8 @@ export default function App() {
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
               <Route path="/library" element={<ProtectedRoute><Library /></ProtectedRoute>} />
+              <Route path="/study/:documentId" element={<ProtectedRoute><Study /></ProtectedRoute>} />
+              <Route path="/study/:documentId/flashcards" element={<ProtectedRoute><Study /></ProtectedRoute>} />
               <Route path="/login" element={<Login />} />
             </Routes>
         </Layout>

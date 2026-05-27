@@ -1,8 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
-import { Upload as UploadIcon, FileText, X, CheckCircle, Loader2 } from 'lucide-react';
-import { storage, db, auth } from '../lib/firebase';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useRef } from 'react';
+import { Upload as UploadIcon, FileText, BookOpen, X, CheckCircle, Loader2 } from 'lucide-react';
+import { auth } from '../lib/firebase';
 
 const SUBJECTS = ["Biology", "Chemistry", "Physics", "Mathematics", "Engineering", "Law", "Business", "History", "Computer Science", "Medicine", "Other"];
 
@@ -31,48 +29,62 @@ export const Upload = () => {
 
     const generateMaterial = async () => {
         if (!file || !subject || !auth.currentUser) return;
+        if (!options.flashcards && !options.summaryNotes) {
+            alert("Please select at least one study material format (Flashcards or Summary Notes) to generate.");
+            return;
+        }
+
         setUploading(true);
         setProgress([
-            { step: 'File Uploaded', status: 'pending' },
-            { step: 'Reading Content...', status: 'pending' },
-            { step: 'Identifying Key Concepts...', status: 'pending' },
-            { step: 'Generating Flashcards...', status: 'pending' },
-            { step: 'Building Summary Notes...', status: 'pending' }
+            { step: 'Uploading file securely...', status: 'loading' },
+            { step: 'Extracting educational content...', status: 'pending' },
+            { step: 'AI generating custom materials...', status: 'pending' }
         ]);
 
-        const storageRef = ref(storage, `documents/${auth.currentUser.uid}/${Date.now()}_${file.name}`);
-        const uploadTask = uploadBytesResumable(storageRef, file);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('userId', auth.currentUser.uid);
+            formData.append('subject', subject);
 
-        uploadTask.on('state_changed', 
-            (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                if (progress === 100) setProgress(p => p?.map((s, i) => i === 0 ? {...s, status: 'done'} : s) || null);
-            },
-            (error) => {
-                console.error(error);
-                setUploading(false);
-            },
-            async () => {
-                const docRef = await addDoc(collection(db, 'documents'), {
-                    userId: auth.currentUser!.uid,
-                    fileName: file.name,
-                    fileUrl: storageRef.fullPath, // Use storage path directly
-                    subject,
-                    type: file.type.includes('pdf') ? 'pdf' : 'image',
-                    status: 'processing',
-                    uploadedAt: serverTimestamp()
-                });
-                
-                await fetch('/api/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ documentId: docRef.id })
-                });
+            // Upload via backend server route, avoiding Firebase client Storage CORS blocks
+            const uploadRes = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
 
-                setUploading(false);
-                alert("Upload successful! AI is processing...");
+            if (!uploadRes.ok) {
+                throw new Error("Local file upload failed. Please try again.");
             }
-        );
+
+            const uploadData = await uploadRes.json();
+            const documentId = uploadData.documentId;
+
+            setProgress(p => p?.map((s, i) => i === 0 ? { ...s, status: 'done' } : (i === 1 ? { ...s, status: 'loading' } : s)) || null);
+
+            // Call backend generation endpoint with structural switches
+            const genRes = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ documentId, options })
+            });
+
+            if (!genRes.ok) {
+                throw new Error("AI generation for study material failed.");
+            }
+
+            setProgress(p => p?.map(s => ({ ...s, status: 'done' })) || null);
+            setUploading(false);
+            alert("Upload successful! AI has populated your study library!");
+            setFile(null);
+            setSubject('');
+            setProgress(null);
+        } catch (error: any) {
+            console.error("Study Upload Error:", error);
+            alert(error.message || "An error occurred during study generation.");
+            setUploading(false);
+            setProgress(null);
+        }
     };
 
     return (
@@ -95,30 +107,90 @@ export const Upload = () => {
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-[#E5E7EB]">
                         <div className="flex items-center gap-3">
                             <FileText className="w-8 h-8 text-[#0F7B6C]" />
-                            <span className="font-medium">{file.name}</span>
+                            <span className="font-medium truncate max-w-[400px]">{file.name}</span>
                         </div>
-                        <button onClick={() => setFile(null)}><X className="w-5 h-5 text-gray-400" /></button>
+                        <button onClick={() => setFile(null)} disabled={uploading}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
                     </div>
 
-                    <select className="w-full p-3 rounded-xl border border-[#E5E7EB]" value={subject} onChange={(e) => setSubject(e.target.value)}>
-                        <option value="">Select Subject</option>
-                        {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-
-                    <div className="flex gap-4">
-                        <button className={`flex-1 p-3 rounded-xl border ${options.flashcards ? 'bg-[#0F7B6C] text-white border-[#0F7B6C]' : 'border-[#E5E7EB]'}`} onClick={() => setOptions(p => ({...p, flashcards: !p.flashcards}))}>Flashcards</button>
-                        <button className={`flex-1 p-3 rounded-xl border ${options.summaryNotes ? 'bg-[#0F7B6C] text-white border-[#0F7B6C]' : 'border-[#E5E7EB]'}`} onClick={() => setOptions(p => ({...p, summaryNotes: !p.summaryNotes}))}>Summary Notes</button>
+                    <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">Select Subject:</label>
+                        <select className="w-full p-3 rounded-xl border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#0F7B6C]" value={subject} onChange={(e) => setSubject(e.target.value)} disabled={uploading}>
+                            <option value="">Choose a study subject...</option>
+                            {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
                     </div>
 
-                    <button className="w-full bg-[#0F7B6C] text-white py-3 rounded-xl font-bold" onClick={generateMaterial} disabled={uploading}>Generate Study Material</button>
+                    <div className="space-y-3">
+                        <label className="block text-sm font-medium text-gray-700">Choose Materials to Generate:</label>
+                        <div className="grid grid-cols-2 gap-4">
+                            {/* Flashcards Toggle Card */}
+                            <div 
+                                className={`p-4 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${options.flashcards ? 'border-[#0F7B6C] bg-[#F0FDF4]' : 'border-gray-200 bg-white hover:border-gray-300'} ${uploading ? 'pointer-events-none opacity-60' : ''}`}
+                                onClick={() => setOptions(p => ({ ...p, flashcards: !p.flashcards }))}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <span className="p-2 bg-[#E6F4F1] rounded-lg text-[#0F7B6C]">
+                                        <FileText className="w-5 h-5" />
+                                    </span>
+                                    {/* Custom toggle pill */}
+                                    <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out ${options.flashcards ? 'bg-[#0F7B6C]' : 'bg-gray-200'}`}>
+                                        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${options.flashcards ? 'translate-x-6' : 'translate-x-0'}`} />
+                                    </div>
+                                </div>
+                                <div className="mt-4">
+                                    <h4 className="font-bold text-gray-900 leading-snug">Flashcards</h4>
+                                    <p className="text-xs text-gray-500 mt-1 lines-2">Generate active-recall practice cards tagged by topic and difficulty.</p>
+                                    <span className={`inline-block mt-3 text-xs font-bold px-2 py-1 rounded ${options.flashcards ? 'bg-[#E6F4F1] text-[#0F7B6C]' : 'bg-gray-100 text-gray-500'}`}>
+                                        {options.flashcards ? 'ENABLED ✅' : 'DISABLED ❌'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Summary Notes Toggle Card */}
+                            <div 
+                                className={`p-4 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${options.summaryNotes ? 'border-[#0F7B6C] bg-[#F0FDF4]' : 'border-gray-200 bg-white hover:border-gray-300'} ${uploading ? 'pointer-events-none opacity-60' : ''}`}
+                                onClick={() => setOptions(p => ({ ...p, summaryNotes: !p.summaryNotes }))}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <span className="p-2 bg-[#E6F4F1] rounded-lg text-[#0F7B6C]">
+                                        <BookOpen className="w-5 h-5" />
+                                    </span>
+                                    {/* Custom toggle pill */}
+                                    <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out ${options.summaryNotes ? 'bg-[#0F7B6C]' : 'bg-gray-200'}`}>
+                                        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${options.summaryNotes ? 'translate-x-6' : 'translate-x-0'}`} />
+                                    </div>
+                                </div>
+                                <div className="mt-4">
+                                    <h4 className="font-bold text-gray-900 leading-snug">Summary Notes</h4>
+                                    <p className="text-xs text-gray-500 mt-1 lines-2">Synthesizes key concepts into organized headings and reference points.</p>
+                                    <span className={`inline-block mt-3 text-xs font-bold px-2 py-1 rounded ${options.summaryNotes ? 'bg-[#E6F4F1] text-[#0F7B6C]' : 'bg-gray-100 text-gray-500'}`}>
+                                        {options.summaryNotes ? 'ENABLED ✅' : 'DISABLED ❌'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button className="w-full bg-[#0F7B6C] hover:bg-[#0c665a] transition text-white py-3.5 rounded-xl font-bold cursor-pointer disabled:opacity-50" onClick={generateMaterial} disabled={uploading || !subject}>
+                        {uploading ? 'AI Processing Study Material...' : 'Generate Study Material'}
+                    </button>
                 </div>
             )}
              {progress && (
-                <div className="mt-6 space-y-2">
+                <div className="mt-6 p-4 rounded-xl bg-gray-50 border border-gray-100 space-y-3">
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Upload & Build Progress</h4>
                     {progress.map((p, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm font-medium">
-                            {p.status === 'done' ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Loader2 className="w-4 h-4 animate-spin" />}
-                            {p.step}
+                        <div key={i} className="flex items-center gap-2.5 text-sm font-medium">
+                            {p.status === 'done' ? (
+                                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+                            ) : p.status === 'loading' ? (
+                                <Loader2 className="w-5 h-5 text-[#0F7B6C] animate-spin flex-shrink-0" />
+                            ) : (
+                                <div className="w-5 h-5 rounded-full border border-gray-300 flex-shrink-0" />
+                            )}
+                            <span className={p.status === 'done' ? 'text-gray-500 line-through' : p.status === 'loading' ? 'text-gray-900 font-bold' : 'text-gray-400'}>
+                                {p.step}
+                            </span>
                         </div>
                     ))}
                 </div>
