@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useAuth } from './AuthProvider';
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth();
+  
   return (
     <div className="min-h-screen bg-app-bg text-[#1A1A1A] font-sans">
       <nav className="h-16 bg-white border-b border-[#E5E7EB] flex items-center justify-between px-8">
@@ -14,8 +17,10 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <Link to="/upload" className="hover:text-brand-teal">Upload</Link>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <span>Alex Johnson</span>
-          <div className="w-8 h-8 rounded-full bg-brand-teal text-white flex items-center justify-center font-semibold text-xs">AJ</div>
+          <span>{user?.displayName || user?.email || 'User'}</span>
+          <div className="w-8 h-8 rounded-full bg-brand-teal text-white flex items-center justify-center font-semibold text-xs">
+            {user?.displayName ? user.displayName.split(' ').map(n=>n[0]).join('') : 'U'}
+          </div>
         </div>
       </nav>
       <main className="p-8">
