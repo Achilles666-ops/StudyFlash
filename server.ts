@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import { admin, adminDb, adminStorage } from "./src/lib/firebase-admin";
 import { generateStudyMaterial } from "./src/lib/gemini";
@@ -15,16 +16,16 @@ async function startServer() {
   // API routes go here
   app.use(express.json());
 
-  // Allow requests from any origin to resolve CORS for external static wrappers (e.g. workers.dev)
-  app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    if (req.method === "OPTIONS") {
-      return res.status(200).end();
-    }
-    next();
-  });
+  // Enable robust CORS middleware with dynamic origin support (essential for credentials and custom domains)
+  app.use(cors({
+    origin: (origin, callback) => {
+      // Dynamically allow any requesting origin to support cloudflare workers, custom frontends, etc.
+      callback(null, true);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"]
+  }));
 
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
