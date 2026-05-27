@@ -5,12 +5,7 @@ import { auth } from '../lib/firebase';
 const SUBJECTS = ["Biology", "Chemistry", "Physics", "Mathematics", "Engineering", "Law", "Business", "History", "Computer Science", "Medicine", "Other"];
 
 const getApiUrl = (endpoint: string) => {
-    // If loaded on a .run.app origin (dev, pre, production), fetch is relative
-    if (window.location.hostname.endsWith('run.app') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        return endpoint;
-    }
-    // Since we are actively developing, all Node.js backend updates run on the dev container:
-    return `https://ais-dev-vg24chvlvykrjt5uirzy5w-501871590058.asia-east1.run.app${endpoint}`;
+    return endpoint;
 };
 
 export const Upload = () => {
