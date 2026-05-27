@@ -2,7 +2,7 @@ export interface Document {
   id: string;
   userId: string;
   fileName: string;
-  fileUrl: string;
+  extractedTextPreview?: string;
   subject: string;
   type: 'pdf' | 'image';
   pageCount?: number;

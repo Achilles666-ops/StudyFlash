@@ -21,7 +21,7 @@
       "properties": {
         "userId": { "type": "string" },
         "fileName": { "type": "string" },
-        "fileUrl": { "type": "string" },
+        "extractedTextPreview": { "type": "string" },
         "subject": { "type": "string" },
         "type": { "type": "string", "enum": ["pdf", "image"] },
         "pageCount": { "type": "number" },

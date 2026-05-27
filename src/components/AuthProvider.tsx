@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, handleRedirectResult } from '../lib/firebase';
 
 const AuthContext = createContext<{ user: User | null; loading: boolean }>({ user: null, loading: true });
 
@@ -9,6 +9,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Correctly catch standard sign-in redirect result on mount
+    handleRedirectResult().catch((error) => {
+      console.error('Redirect sign-in handler error:', error);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);

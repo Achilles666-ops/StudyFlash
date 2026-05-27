@@ -1,18 +1,17 @@
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import admin from 'firebase-admin';
 
-// Initialize with default credentials and explicit custom resources
+const projectId = process.env.FIREBASE_PROJECT_ID;
+
 if (!admin.apps.length) {
   admin.initializeApp({
-    storageBucket: firebaseConfig.storageBucket
+    credential: admin.credential.cert({
+      projectId: projectId,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+    })
   });
 }
 
 export { admin };
-export const adminDb = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
-  ? getFirestore(firebaseConfig.firestoreDatabaseId)
-  : getFirestore();
-export const adminStorage = admin.storage();
-
-
+export const adminFirestore = admin.firestore();
+export const adminDb = adminFirestore;
