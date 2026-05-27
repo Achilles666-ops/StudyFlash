@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-// FIX 2A — Validate environment variables at server startup (excluding FIREBASE_STORAGE_BUCKET)
+// Validate environment variables at server startup (log warning instead of crashing to allow graceful UI instructions)
 const requiredEnvVars = [
   'GEMINI_API_KEY',
   'FIREBASE_PROJECT_ID',
@@ -11,8 +11,8 @@ const requiredEnvVars = [
 
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
-  console.error('MISSING ENV VARS:', missingVars.join(', '));
-  process.exit(1);
+  console.warn('⚠️ WARNING: SOME REQUIRED ENV VARS ARE MISSING AT STARTUP:', missingVars.join(', '));
+  console.warn('Please complete configuration via Settings in your AI Studio panel.');
 }
 
 import express from "express";
@@ -154,6 +154,15 @@ async function startServer() {
   // FIX 2C — Wrap the upload route in try/catch and return real errors (excluding storage upload!)
   app.post('/api/upload', upload.single('file'), async (req, res) => {
     try {
+      // Step 0 — Validate all required environment variables are set
+      const required = ['GEMINI_API_KEY', 'FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY'];
+      const missing = required.filter(v => !process.env[v]);
+      if (missing.length > 0) {
+        return res.status(500).json({
+          error: `Missing configuration keys: [${missing.join(', ')}]. Please complete configuration via Settings in your AI Studio panel.`
+        });
+      }
+
       // Step 1 — Validate file exists
       if (!req.file) {
         return res.status(400).json({ error: 'No file received' });
@@ -270,6 +279,16 @@ async function startServer() {
         console.error("Material generation error:", e);
         res.status(500).send('Error: ' + e.message);
     }
+  });
+
+  // Global Error Handler Middleware to guarantee JSON format on all unexpected exceptions
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("SERVER UNHANDLED EXCEPTION:", err);
+    res.status(err.status || 500).json({
+      error: err.message || "An unexpected server error occurred on StudyFlash backend.",
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+      code: err.code || "UNHANDLED_EXCEPTION"
+    });
   });
 
   // Vite middleware for development

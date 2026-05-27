@@ -1,6 +1,15 @@
 import React, { useState, useRef } from 'react';
-import { Upload as UploadIcon, FileText, BookOpen, X, CheckCircle, Loader2 } from 'lucide-react';
+import { Upload as UploadIcon, FileText, BookOpen, X, CheckCircle, Loader2, AlertTriangle, Copy, RefreshCw } from 'lucide-react';
 import { auth } from '../lib/firebase';
+
+interface DiagnosticError {
+    message: string;
+    status?: number;
+    statusText?: string;
+    endpoint?: string;
+    responseBody?: string;
+    isNetworkError?: boolean;
+}
 
 const SUBJECTS = ["Biology", "Chemistry", "Physics", "Mathematics", "Engineering", "Law", "Business", "History", "Computer Science", "Medicine", "Other"];
 
@@ -15,6 +24,32 @@ export const Upload = () => {
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState<{ step: string, status: 'pending' | 'loading' | 'done' }[] | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [errorDetails, setErrorDetails] = useState<DiagnosticError | null>(null);
+    const [copied, setCopied] = useState(false);
+
+    const copyToClipboard = () => {
+        if (!errorDetails) return;
+        const diagnosticsString = JSON.stringify({
+            timestamp: new Date().toISOString(),
+            localTime: new Date().toLocaleTimeString(),
+            url: window.location.href,
+            endpoint: errorDetails.endpoint,
+            statusCode: errorDetails.status,
+            statusText: errorDetails.statusText,
+            isNetworkError: errorDetails.isNetworkError,
+            errorMessage: errorDetails.message,
+            responseBody: errorDetails.responseBody
+        }, null, 2);
+
+        navigator.clipboard.writeText(`Here is the exact diagnostic information from my failed upload/generation step:\n\n\`\`\`json\n${diagnosticsString}\n\`\`\``)
+            .then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            })
+            .catch(() => {
+                alert("Failed to write to clipboard, but you can copy the text manually from the black debug box below!");
+            });
+    };
 
     const onFileDrop = (e: React.DragEvent) => {
         e.preventDefault();
@@ -39,6 +74,7 @@ export const Upload = () => {
         }
 
         setUploading(true);
+        setErrorDetails(null);
         setProgress([
             { step: 'Uploading file securely...', status: 'loading' },
             { step: 'Extracting educational content...', status: 'pending' },
@@ -52,13 +88,44 @@ export const Upload = () => {
             formData.append('subject', subject);
 
             // Upload via backend server route, avoiding Firebase client Storage CORS blocks
-            const uploadRes = await fetch(getApiUrl('/api/upload'), {
-                method: 'POST',
-                body: formData
-            });
+            let uploadRes;
+            try {
+                uploadRes = await fetch(getApiUrl('/api/upload'), {
+                    method: 'POST',
+                    body: formData
+                });
+            } catch (netErr: any) {
+                throw {
+                    message: `Network Connection Failed. The backend server on the Cloud Run console might be restarting or taking a cold-start: ${netErr.message}`,
+                    endpoint: '/api/upload',
+                    isNetworkError: true
+                };
+            }
 
             if (!uploadRes.ok) {
-                throw new Error("Local file upload failed. Please try again.");
+                let errMsg = "Local file upload failed. Please try again.";
+                let rawText = "";
+                try {
+                    rawText = await uploadRes.text();
+                    try {
+                        const errData = JSON.parse(rawText);
+                        if (errData && errData.error) {
+                            errMsg = errData.error;
+                        } else {
+                            errMsg = rawText;
+                        }
+                    } catch (_) {
+                        if (rawText) errMsg = rawText;
+                    }
+                } catch (_) {}
+                
+                throw {
+                    message: errMsg,
+                    status: uploadRes.status,
+                    statusText: uploadRes.statusText,
+                    endpoint: '/api/upload',
+                    responseBody: rawText || errMsg
+                };
             }
 
             const uploadData = await uploadRes.json();
@@ -67,14 +134,45 @@ export const Upload = () => {
             setProgress(p => p?.map((s, i) => i === 0 ? { ...s, status: 'done' } : (i === 1 ? { ...s, status: 'loading' } : s)) || null);
 
             // Call backend generation endpoint with structural switches
-            const genRes = await fetch(getApiUrl('/api/generate'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ documentId, options })
-            });
+            let genRes;
+            try {
+                genRes = await fetch(getApiUrl('/api/generate'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ documentId, options })
+                });
+            } catch (netErr: any) {
+                throw {
+                    message: `Network Connection Failed during material assembly: ${netErr.message}`,
+                    endpoint: '/api/generate',
+                    isNetworkError: true
+                };
+            }
 
             if (!genRes.ok) {
-                throw new Error("AI generation for study material failed.");
+                let errMsg = "AI generation for study material failed.";
+                let rawText = "";
+                try {
+                    rawText = await genRes.text();
+                    try {
+                        const errData = JSON.parse(rawText);
+                        if (errData && errData.error) {
+                            errMsg = errData.error;
+                        } else {
+                            errMsg = rawText;
+                        }
+                    } catch (_) {
+                        if (rawText) errMsg = rawText;
+                    }
+                } catch (_) {}
+
+                throw {
+                    message: errMsg,
+                    status: genRes.status,
+                    statusText: genRes.statusText,
+                    endpoint: '/api/generate',
+                    responseBody: rawText || errMsg
+                };
             }
 
             setProgress(p => p?.map(s => ({ ...s, status: 'done' })) || null);
@@ -84,8 +182,15 @@ export const Upload = () => {
             setSubject('');
             setProgress(null);
         } catch (error: any) {
-            console.error("Study Upload Error:", error);
-            alert(error.message || "An error occurred during study generation.");
+            console.error("Study Upload Error captured:", error);
+            setErrorDetails({
+                message: error.message || "An unexpected error occurred during study generation.",
+                status: error.status,
+                statusText: error.statusText,
+                endpoint: error.endpoint || '/api/upload',
+                responseBody: error.responseBody,
+                isNetworkError: !!error.isNetworkError
+            });
             setUploading(false);
             setProgress(null);
         }
@@ -94,6 +199,87 @@ export const Upload = () => {
     return (
         <div className="max-w-2xl mx-auto p-6 bg-white rounded-2xl shadow-sm border border-[#E5E7EB]">
             <h2 className="text-2xl font-bold mb-6">Upload & Generate</h2>
+
+            {errorDetails && (
+                <div className="mb-6 p-5 bg-rose-50 border border-rose-200 rounded-xl relative overflow-hidden transition-all duration-300">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="flex gap-2 text-rose-800 font-bold items-center">
+                            <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                            <h3 className="text-base font-semibold">AI Diagnostic & Troubleshooting Panel</h3>
+                        </div>
+                        <button 
+                            className="p-1 hover:bg-rose-100 rounded text-rose-500 hover:text-rose-700 transition cursor-pointer"
+                            onClick={() => setErrorDetails(null)}
+                            title="Dismiss error"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    <p className="text-sm text-rose-700 mt-2 font-medium">
+                        {errorDetails.message}
+                    </p>
+
+                    {/* Metadata Grid */}
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-rose-800 bg-rose-100/50 p-3 rounded-lg border border-rose-200">
+                        <div>
+                            <span className="font-bold text-rose-900 block">Requested Endpoint</span>
+                            <code className="font-mono">{errorDetails.endpoint}</code>
+                        </div>
+                        <div>
+                            <span className="font-bold text-rose-900 block">HTTP Code / Status</span>
+                            <code className="font-mono bg-rose-200/60 px-1 py-0.5 rounded">
+                                {errorDetails.isNetworkError ? 'Network Connection Failure' : `${errorDetails.status} ${errorDetails.statusText || ''}`}
+                            </code>
+                        </div>
+                    </div>
+
+                    {/* Copyable Raw Payload for AI */}
+                    <div className="mt-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-rose-900 uppercase tracking-wider">Troubleshooting Logs</span>
+                            <button
+                                onClick={copyToClipboard}
+                                className="flex items-center gap-1.5 text-xs bg-white text-[#0F7B6C] border border-[#0F7B6C]/20 px-2.5 py-1.5 rounded-lg shadow-sm hover:bg-gray-50 active:scale-95 transition cursor-pointer font-bold"
+                            >
+                                {copied ? (
+                                    <>
+                                        <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                                        <span>Copied!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Copy className="w-3.5 h-3.5" />
+                                        <span>Copy logs for AI Assistant</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                        
+                        {errorDetails.responseBody && (
+                            <div className="relative">
+                                <pre className="font-mono text-[11px] bg-slate-900 text-green-400 p-3.5 rounded-lg max-h-36 overflow-y-auto border border-slate-800 leading-relaxed select-all">
+                                    {errorDetails.responseBody}
+                                </pre>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mt-4 flex gap-2 justify-end text-xs">
+                        <button 
+                            onClick={async () => {
+                                setErrorDetails(null);
+                                await generateMaterial();
+                            }}
+                            className="flex items-center gap-1 bg-[#0F7B6C] text-white font-bold py-2 px-3 rounded-lg hover:bg-[#0c665a] transition cursor-pointer"
+                        >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Retry Study Generation</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {!file ? (
                 <div 
                     className="border-2 border-dashed border-[#0F7B6C] rounded-2xl p-12 text-center bg-[#E6F4F1] cursor-pointer"
