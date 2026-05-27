@@ -24,44 +24,100 @@ import multer from "multer";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Resilient Gemini query helper with model fallbacks and exponential backoff
+async function callGeminiWithFallbackAndRetry(
+  apiKey: string,
+  primaryModel: string,
+  body: any,
+  fallbackModels: string[] = ['gemini-3.5-flash', 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash']
+): Promise<any> {
+  // De-duplicate model names while keeping order of preference
+  const models = Array.from(new Set([primaryModel, ...fallbackModels]));
+  let lastError: any = null;
+
+  for (const model of models) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    let attempt = 0;
+    const maxAttempts = 3;
+    let delay = 1000;
+
+    while (attempt < maxAttempts) {
+      try {
+        console.log(`[Gemini Request] Querying model: ${model} (attempt ${attempt + 1}/${maxAttempts})...`);
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (response.status === 429 || response.status === 503 || response.status >= 500) {
+          const errText = await response.text();
+          console.warn(`[Gemini Warning] Transient error ${response.status} for model ${model}: ${errText}. Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+          attempt++;
+          lastError = new Error(`Gemini API error ${response.status}: ${errText}`);
+          continue;
+        }
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Gemini API error ${response.status}: ${errText}`);
+        }
+
+        const data = await response.json() as any;
+        if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          // If the model output text is blank/empty, maybe it was a safety block or weird response
+          console.warn(`[Gemini Warning] Model ${model} returned blank candidate structure:`, JSON.stringify(data));
+          throw new Error("Empty candidate response structure from Gemini.");
+        }
+
+        return data; // Success!
+
+      } catch (error: any) {
+        console.error(`[Gemini Error] Attempt ${attempt + 1} failed for model ${model}:`, error.message);
+        lastError = error;
+        attempt++;
+        if (attempt < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+        }
+      }
+    }
+    console.warn(`[Gemini Fallback] Model ${model} was unavailable or failed after all attempts. Falling back to next model...`);
+  }
+
+  throw lastError || new Error("All candidate Gemini models failed or returned internal errors.");
+}
+
 // FIX 2D — Fix the Gemini text extraction function
 async function extractTextWithGeminiVision(fileBuffer: Buffer, mimeType: string): Promise<string> {
   try {
     const base64Data = fileBuffer.toString('base64');
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    const result = await callGeminiWithFallbackAndRetry(
+      process.env.GEMINI_API_KEY || '',
+      'gemini-3.5-flash',
       {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64Data
-                }
-              },
-              {
-                text: 'This is a university lecture note or study material. Extract all visible text exactly as written. Preserve headings and structure. Return plain text only.'
+        contents: [{
+          parts: [
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: base64Data
               }
-            ]
-          }]
-        })
+            },
+            {
+              text: 'This is a university lecture note or study material. Extract all visible text exactly as written. Preserve headings and structure. Return plain text only.'
+            }
+          ]
+        }]
       }
     );
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Gemini Vision API error: ${response.status} ${errText}`);
-    }
-
-    const data = await response.json() as any;
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return result.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
   } catch (error: any) {
-    console.error('Gemini Vision error:', error.message);
+    console.error('Gemini Vision error after fallbacks & retries:', error.message);
     throw error;
   }
 }
@@ -70,15 +126,13 @@ async function extractTextWithGeminiVision(fileBuffer: Buffer, mimeType: string)
 async function generateStudyMaterial(extractedText: string): Promise<any> {
   const truncated = extractedText.slice(0, 6000);
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+  const result = await callGeminiWithFallbackAndRetry(
+    process.env.GEMINI_API_KEY || '',
+    'gemini-3.5-flash',
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: `You are a university study assistant. Read the lecture content below and return ONLY a valid JSON object with no markdown, no backticks, no explanation.
+      contents: [{
+        parts: [{
+          text: `You are a university study assistant. Read the lecture content below and return ONLY a valid JSON object with no markdown, no backticks, no explanation.
 
 Generate:
 1. Up to 20 flashcards — each with a question, answer, and difficulty (easy/medium/hard)
@@ -102,27 +156,20 @@ Return this exact JSON structure:
 
 Lecture content:
 ${truncated}`
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 4096,
-          responseMimeType: "application/json"
-        }
-      })
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 4096,
+        responseMimeType: "application/json"
+      }
     }
   );
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini API error: ${response.status} ${errText}`);
-  }
-
-  const data = await response.json() as any;
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
   if (!rawText.trim()) {
-    console.warn('Gemini empty response. Full response body:', JSON.stringify(data));
+    console.warn('Gemini empty response. Full response body:', JSON.stringify(result));
     throw new Error('Gemini returned an empty response. This can happen if the content was filtered by safety settings.');
   }
 
