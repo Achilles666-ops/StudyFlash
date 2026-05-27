@@ -1,10 +1,10 @@
 {
-  "projectId": "elliptical-clone-tmvz5",
-  "appId": "1:304586748698:web:e865bbe90c7d72e642f2a3",
-  "apiKey": "AIzaSyDgicQbuat1Vc5OpwVirwQ4bQ9DLSZutRI",
-  "authDomain": "elliptical-clone-tmvz5.firebaseapp.com",
+  "projectId": "studyflash-9fc46-a39d0",
+  "appId": "1:1028629860543:web:c0f52e89123bae715fb60a",
+  "apiKey": "AIzaSyDLqlmS3PiUMXkRdvg8i6nA28tVLl672xs",
+  "authDomain": "studyflash-9fc46-a39d0.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-46f0a67b-eac7-4914-8055-0fab7f350438",
-  "storageBucket": "elliptical-clone-tmvz5.firebasestorage.app",
-  "messagingSenderId": "304586748698",
+  "storageBucket": "studyflash-9fc46-a39d0.firebasestorage.app",
+  "messagingSenderId": "1028629860543",
   "measurementId": ""
 }
