@@ -1,0 +1,6 @@
+{
+  "name": "StudyFlash",
+  "description": "AI-powered study flashcard and summary generator for students",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

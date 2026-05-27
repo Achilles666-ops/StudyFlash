@@ -1,0 +1,84 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "university": { "type": "string" },
+        "fieldOfStudy": { "type": "string" },
+        "plan": { "type": "string", "enum": ["free", "pro"] },
+        "uploadCount": { "type": "number" },
+        "createdAt": { "type": "timestamp" }
+      }
+    },
+    "Document": {
+      "title": "Document",
+      "description": "Uploaded study document",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "subject": { "type": "string" },
+        "type": { "type": "string", "enum": ["pdf", "image"] },
+        "pageCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["processing", "ready", "failed"] },
+        "flashcardCount": { "type": "number" },
+        "uploadedAt": { "type": "timestamp" }
+      }
+    },
+    "Flashcard": {
+      "title": "Flashcard",
+      "description": "Study flashcard",
+      "type": "object",
+      "properties": {
+        "documentId": { "type": "string" },
+        "userId": { "type": "string" },
+        "question": { "type": "string" },
+        "answer": { "type": "string" },
+        "difficulty": { "type": "string", "enum": ["easy", "medium", "hard"] },
+        "lastRating": { "type": "string", "enum": ["got_it", "almost", "review_again"] },
+        "ratedAt": { "type": "timestamp" }
+      }
+    },
+    "SummaryNote": {
+      "title": "SummaryNote",
+      "description": "AI-generated summary notes",
+      "type": "object",
+      "properties": {
+        "documentId": { "type": "string" },
+        "userId": { "type": "string" },
+        "sections": { "type": "array" },
+        "keyTerms": { "type": "array" },
+        "estimatedReadMins": { "type": "number" },
+        "generatedAt": { "type": "timestamp" }
+      }
+    },
+    "StudySession": {
+      "title": "StudySession",
+      "description": "Tracked study session",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "documentId": { "type": "string" },
+        "mode": { "type": "string", "enum": ["flashcard", "notes", "quiz"] },
+        "startedAt": { "type": "timestamp" },
+        "completedAt": { "type": "timestamp" },
+        "cardsReviewed": { "type": "number" },
+        "gotItCount": { "type": "number" },
+        "almostCount": { "type": "number" },
+        "reviewAgainCount": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "users/{userId}": { "schema": "User", "description": "User profiles" },
+    "documents/{documentId}": { "schema": "Document", "description": "Study documents" },
+    "flashcards/{flashcardId}": { "schema": "Flashcard", "description": "Document flashcards" },
+    "summaryNotes/{noteId}": { "schema": "SummaryNote", "description": "Document summary notes" },
+    "studySessions/{sessionId}": { "schema": "StudySession", "description": "Study session logs" }
+  }
+}
