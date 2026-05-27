@@ -344,7 +344,8 @@ ${truncated}`
         }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 4096
+          maxOutputTokens: 4096,
+          responseMimeType: "application/json"
         }
       })
     }
@@ -358,12 +359,17 @@ ${truncated}`
   const data = await response.json()
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
 
+  if (!rawText.trim()) {
+    console.warn('Gemini empty response. Full response body:', JSON.stringify(data));
+    throw new Error('Gemini returned an empty response. This can happen if the content was filtered by safety settings.');
+  }
+
   try {
     const cleaned = rawText.replace(/```json|```/g, '').trim()
     return JSON.parse(cleaned)
   } catch (e) {
     console.error('JSON parse failed. Raw:', rawText.slice(0, 500))
-    throw new Error('Gemini returned invalid JSON')
+    throw new Error('Gemini returned invalid JSON. Cannot parse study material.')
   }
 }
 

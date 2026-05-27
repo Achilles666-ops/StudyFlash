@@ -4,8 +4,10 @@ import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp, 
 import { db } from '../lib/firebase';
 import { Document, Flashcard, SummaryNote } from '../types';
 import { ArrowLeft, BookOpen, FileText, ChevronLeft, ChevronRight, RefreshCw, Star } from 'lucide-react';
+import { useAuth } from './AuthProvider';
 
 export const Study = () => {
+    const { user } = useAuth();
     const { documentId } = useParams<{ documentId: string }>();
     const [document, setDocument] = useState<Document | null>(null);
     const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
@@ -18,7 +20,7 @@ export const Study = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!documentId) return;
+        if (!user || !documentId) return;
 
         // Fetch document info
         const docRef = doc(db, 'documents', documentId);
@@ -29,7 +31,11 @@ export const Study = () => {
         });
 
         // Listen for flashcards
-        const qCards = query(collection(db, 'flashcards'), where('documentId', '==', documentId));
+        const qCards = query(
+            collection(db, 'flashcards'),
+            where('userId', '==', user.uid),
+            where('documentId', '==', documentId)
+        );
         const unsubCards = onSnapshot(qCards, (snapshot) => {
             const cards = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Flashcard));
             setFlashcards(cards);
@@ -40,7 +46,11 @@ export const Study = () => {
         });
 
         // Listen for summary notes
-        const qNotes = query(collection(db, 'summaryNotes'), where('documentId', '==', documentId));
+        const qNotes = query(
+            collection(db, 'summaryNotes'),
+            where('userId', '==', user.uid),
+            where('documentId', '==', documentId)
+        );
         const unsubNotes = onSnapshot(qNotes, (snapshot) => {
             if (!snapshot.empty) {
                 // Take the first generated notes object
@@ -55,7 +65,7 @@ export const Study = () => {
             unsubCards();
             unsubNotes();
         };
-    }, [documentId]);
+    }, [user, documentId]);
 
     const handleRateCard = async (cardId: string, rating: 'review_again' | 'almost' | 'got_it') => {
         try {

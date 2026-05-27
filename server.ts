@@ -106,7 +106,8 @@ ${truncated}`
         }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 4096
+          maxOutputTokens: 4096,
+          responseMimeType: "application/json"
         }
       })
     }
@@ -119,6 +120,11 @@ ${truncated}`
 
   const data = await response.json() as any;
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  if (!rawText.trim()) {
+    console.warn('Gemini empty response. Full response body:', JSON.stringify(data));
+    throw new Error('Gemini returned an empty response. This can happen if the content was filtered by safety settings.');
+  }
 
   try {
     const cleaned = rawText.replace(/```json|```/g, '').trim();

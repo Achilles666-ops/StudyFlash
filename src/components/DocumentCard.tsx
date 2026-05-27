@@ -3,14 +3,21 @@ import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/f
 import { db } from '../lib/firebase';
 import { Document } from '../types';
 import { Link } from 'react-router-dom';
+import { useAuth } from './AuthProvider';
 
 export const DocumentCard: React.FC<{ doc: Document, onDelete: (id: string) => void }> = ({ doc: document, onDelete }) => {
+    const { user } = useAuth();
     const [mastery, setMastery] = useState(0);
     const [isEditing, setIsEditing] = useState(false);
     const [fileName, setFileName] = useState(document.fileName);
 
     useEffect(() => {
-        const q = query(collection(db, 'flashcards'), where('documentId', '==', document.id));
+        if (!user) return;
+        const q = query(
+            collection(db, 'flashcards'),
+            where('userId', '==', user.uid),
+            where('documentId', '==', document.id)
+        );
         return onSnapshot(q, (snapshot) => {
             const cards = snapshot.docs.map(d => d.data());
             if (cards.length === 0) {
