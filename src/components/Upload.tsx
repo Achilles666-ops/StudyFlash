@@ -4,6 +4,15 @@ import { auth } from '../lib/firebase';
 
 const SUBJECTS = ["Biology", "Chemistry", "Physics", "Mathematics", "Engineering", "Law", "Business", "History", "Computer Science", "Medicine", "Other"];
 
+const getApiUrl = (endpoint: string) => {
+    // If loaded on a .run.app origin (dev, pre, production), fetch is relative
+    if (window.location.hostname.endsWith('run.app') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return endpoint;
+    }
+    // Otherwise utilize the dedicated active backend Cloud Run service as the API host
+    return `https://ais-pre-vg24chvlvykrjt5uirzy5w-501871590058.asia-east1.run.app${endpoint}`;
+};
+
 export const Upload = () => {
     const [file, setFile] = useState<File | null>(null);
     const [subject, setSubject] = useState('');
@@ -48,7 +57,7 @@ export const Upload = () => {
             formData.append('subject', subject);
 
             // Upload via backend server route, avoiding Firebase client Storage CORS blocks
-            const uploadRes = await fetch('/api/upload', {
+            const uploadRes = await fetch(getApiUrl('/api/upload'), {
                 method: 'POST',
                 body: formData
             });
@@ -63,7 +72,7 @@ export const Upload = () => {
             setProgress(p => p?.map((s, i) => i === 0 ? { ...s, status: 'done' } : (i === 1 ? { ...s, status: 'loading' } : s)) || null);
 
             // Call backend generation endpoint with structural switches
-            const genRes = await fetch('/api/generate', {
+            const genRes = await fetch(getApiUrl('/api/generate'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ documentId, options })
