@@ -1,22 +1,24 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
+import { db } from '../lib/firebase';
+import { useAuth } from './AuthProvider';
 import { Document } from '../types';
 import { DocumentCard } from './DocumentCard';
 
 export const Library = () => {
+    const { user } = useAuth();
     const [documents, setDocuments] = useState<Document[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
-        if (!auth.currentUser) return;
-        const q = query(collection(db, 'documents'), where('userId', '==', auth.currentUser.uid));
+        if (!user) return;
+        const q = query(collection(db, 'documents'), where('userId', '==', user.uid));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Document));
             setDocuments(docs);
         });
         return unsubscribe;
-    }, []);
+    }, [user]);
 
     const filteredDocs = documents.filter(doc => 
         doc.fileName.toLowerCase().includes(searchTerm.toLowerCase()) || 

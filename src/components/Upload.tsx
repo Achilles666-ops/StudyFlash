@@ -9,8 +9,8 @@ const getApiUrl = (endpoint: string) => {
     if (window.location.hostname.endsWith('run.app') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         return endpoint;
     }
-    // Otherwise utilize the dedicated active backend Cloud Run service as the API host
-    return `https://ais-pre-vg24chvlvykrjt5uirzy5w-501871590058.asia-east1.run.app${endpoint}`;
+    // Since we are actively developing, all Node.js backend updates run on the dev container:
+    return `https://ais-dev-vg24chvlvykrjt5uirzy5w-501871590058.asia-east1.run.app${endpoint}`;
 };
 
 export const Upload = () => {
