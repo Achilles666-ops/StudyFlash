@@ -1,6 +1,10 @@
 import admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
+import fs from 'fs';
+import path from 'path';
 
 let isInitialized = false;
+let databaseId: string | undefined = undefined;
 
 function ensureFirebaseAdmin() {
   if (isInitialized) return;
@@ -24,6 +28,21 @@ function ensureFirebaseAdmin() {
       })
     });
   }
+
+  // Load backend firestoreDatabaseId if configured in workspace
+  try {
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (config && config.firestoreDatabaseId) {
+        databaseId = config.firestoreDatabaseId;
+        console.log(`[firebase-admin] Detected custom firestoreDatabaseId: ${databaseId}`);
+      }
+    }
+  } catch (err) {
+    console.warn('[firebase-admin] Could not read firebase-applet-config.json for databaseId, defaulting to standard', err);
+  }
+
   isInitialized = true;
 }
 
@@ -31,7 +50,8 @@ function ensureFirebaseAdmin() {
 export const adminFirestore = new Proxy({} as admin.firestore.Firestore, {
   get(target, prop, receiver) {
     ensureFirebaseAdmin();
-    const db = admin.firestore();
+    const app = admin.apps[0];
+    const db = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
     const value = (db as any)[prop];
     if (typeof value === 'function') {
       return value.bind(db);
