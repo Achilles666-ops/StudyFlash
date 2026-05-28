@@ -334,6 +334,71 @@ async function startServer() {
     }
   });
 
+  app.get('/api/quiz/:documentId', async (req, res, next) => {
+    const { documentId } = req.params;
+    try {
+      // Query flashcards from 'flashcards'
+      let flashcardsSnap = await adminFirestore.collection('flashcards')
+        .where('documentId', '==', documentId)
+        .get();
+
+      let cards = flashcardsSnap.docs.map(doc => doc.data());
+
+      // Try capitalized 'Flashcards' collection if 'flashcards' was empty
+      if (cards.length === 0) {
+        flashcardsSnap = await adminFirestore.collection('Flashcards')
+          .where('documentId', '==', documentId)
+          .get();
+        cards = flashcardsSnap.docs.map(doc => doc.data());
+      }
+
+      if (cards.length === 0) {
+        return res.status(404).json({ error: "No study questions found associated with this document. Flashcards must be generated first!" });
+      }
+
+      const prompt = `Based on these study questions, generate a multiple-choice quiz of up to 10 questions. For each question, provide 4 options, a correct answer, and an explanation.
+
+Return ONLY a valid JSON object with the following structure:
+{
+  "questions": [
+    {
+      "question": "...",
+      "options": ["...", "...", "...", "..."],
+      "correctAnswer": "...",
+      "explanation": "..."
+    }
+  ]
+}
+
+Study questions data:
+${JSON.stringify(cards.slice(0, 20))}`;
+
+      const geminiResult = await callGeminiWithFallbackAndRetry(
+        process.env.GEMINI_API_KEY || '',
+        'gemini-2.5-flash',
+        {
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 2048,
+            responseMimeType: "application/json"
+          }
+        }
+      );
+
+      const rawText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const cleaned = rawText.replace(/```json|```/g, '').trim();
+      const quiz = JSON.parse(cleaned);
+
+      res.json(quiz);
+    } catch (e: any) {
+      console.error("Quiz generation error on backend server.ts:", e);
+      next(e);
+    }
+  });
+
   // Global Error Handler Middleware to guarantee JSON format on all unexpected exceptions
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error("SERVER UNHANDLED EXCEPTION:", err);
