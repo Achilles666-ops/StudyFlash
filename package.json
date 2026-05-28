@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node --input-type=commonjs -e \"require('fs').writeFileSync('dist/.assetsignore', '_worker.js\\n'); require('fs').writeFileSync('dist/_redirects', '/* /index.html 200\\n')\"",
+    "build": "vite build && node --input-type=commonjs -e \"require('fs').writeFileSync('dist/.assetsignore', '_worker.js\\n'); try{require('fs').unlinkSync('dist/_redirects')}catch(e){}\"",
     "preview": "vite preview"
   },
   "dependencies": {
