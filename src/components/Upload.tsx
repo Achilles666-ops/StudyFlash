@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Upload as UploadIcon, FileText, BookOpen, X, CheckCircle, Loader2, AlertTriangle, Copy, RefreshCw } from 'lucide-react';
 import { auth } from '../lib/firebase';
 
@@ -29,6 +30,7 @@ const getApiUrl = (endpoint: string) => {
 };
 
 export const Upload = () => {
+    const navigate = useNavigate();
     const [file, setFile] = useState<File | null>(null);
     const [subject, setSubject] = useState('');
     const [options, setOptions] = useState({ flashcards: true, summaryNotes: true });
@@ -92,6 +94,31 @@ export const Upload = () => {
             { step: 'AI generating custom materials...', status: 'pending' }
         ]);
 
+        let timer1: any = null;
+        let timer2: any = null;
+
+        // Visual progress updates during long-running single response
+        timer1 = setTimeout(() => {
+            setProgress(prev => {
+                if (!prev) return null;
+                const next = [...prev];
+                next[0] = { ...next[0], status: 'done' };
+                next[1] = { ...next[1], status: 'loading' };
+                return next;
+            });
+        }, 4000);
+
+        timer2 = setTimeout(() => {
+            setProgress(prev => {
+                if (!prev) return null;
+                const next = [...prev];
+                next[0] = { ...next[0], status: 'done' };
+                next[1] = { ...next[1], status: 'done' };
+                next[2] = { ...next[2], status: 'loading' };
+                return next;
+            });
+        }, 8000);
+
         try {
             const formData = new FormData();
             formData.append('file', file);
@@ -142,57 +169,28 @@ export const Upload = () => {
             const uploadData = await uploadRes.json();
             const documentId = uploadData.documentId;
 
-            setProgress(p => p?.map((s, i) => i === 0 ? { ...s, status: 'done' } : (i === 1 ? { ...s, status: 'loading' } : s)) || null);
+            // Clear outstanding progress timers
+            clearTimeout(timer1);
+            clearTimeout(timer2);
 
-            // Call backend generation endpoint with structural switches
-            let genRes;
-            try {
-                genRes = await fetch(getApiUrl('/api/generate'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ documentId, options })
-                });
-            } catch (netErr: any) {
-                throw {
-                    message: `Network Connection Failed during material assembly: ${netErr.message}`,
-                    endpoint: '/api/generate',
-                    isNetworkError: true
-                };
-            }
+            setProgress([
+                { step: 'Uploading file securely...', status: 'done' },
+                { step: 'Extracting educational content...', status: 'done' },
+                { step: 'AI generating custom materials...', status: 'done' }
+            ]);
 
-            if (!genRes.ok) {
-                let errMsg = "AI generation for study material failed.";
-                let rawText = "";
-                try {
-                    rawText = await genRes.text();
-                    try {
-                        const errData = JSON.parse(rawText);
-                        if (errData && errData.error) {
-                            errMsg = errData.error;
-                        } else {
-                            errMsg = rawText;
-                        }
-                    } catch (_) {
-                        if (rawText) errMsg = rawText;
-                    }
-                } catch (_) {}
-
-                throw {
-                    message: errMsg,
-                    status: genRes.status,
-                    statusText: genRes.statusText,
-                    endpoint: '/api/generate',
-                    responseBody: rawText || errMsg
-                };
-            }
-
-            setProgress(p => p?.map(s => ({ ...s, status: 'done' })) || null);
             setUploading(false);
-            alert("Upload successful! AI has populated your study library!");
-            setFile(null);
-            setSubject('');
-            setProgress(null);
+            // Give a tiny moment for the completion state to render
+            setTimeout(() => {
+                setFile(null);
+                setSubject('');
+                setProgress(null);
+                navigate(`/study/${documentId}`);
+            }, 800);
+
         } catch (error: any) {
+            clearTimeout(timer1);
+            clearTimeout(timer2);
             console.error("Study Upload Error captured:", error);
             setErrorDetails({
                 message: error.message || "An unexpected error occurred during study generation.",
