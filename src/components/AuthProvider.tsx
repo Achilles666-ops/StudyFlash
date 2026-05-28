@@ -84,25 +84,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         // Listen in real-time to User document in users collection
         const docRef = doc(db, 'users', currentUser.uid);
-        unsubscribeProfile = onSnapshot(docRef, async (snapshot) => {
+        unsubscribeProfile = onSnapshot(docRef, (snapshot) => {
           if (snapshot.exists()) {
             setProfile(snapshot.data() as UserProfile);
           } else {
-            // Setup a default schema matching profile definition in firebase-blueprint.json
-            const initialProfile: UserProfile = {
-              name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Authorized Scholar',
-              email: currentUser.email || '',
-              university: 'StudyFlash Academy', // Beautiful default placeholder
-              fieldOfStudy: 'Intelligent Systems', // Default placeholder
-              plan: 'free', // Default seed plan
-              uploadCount: 0,
-              createdAt: serverTimestamp()
-            };
-            try {
-              await setDoc(docRef, initialProfile);
-            } catch (err) {
-              handleFirestoreError(err, OperationType.WRITE, `users/${currentUser.uid}`);
-            }
+            setProfile(null);
           }
           setLoading(false);
         }, (error) => {

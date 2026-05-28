@@ -67,7 +67,7 @@ export const DocumentCard: React.FC<{ doc: Document, onDelete: (id: string) => v
                     <button onClick={() => setIsEditing(true)} className="flex-1 bg-gray-100 py-2 rounded-xl text-sm font-semibold">Edit</button>
                 )}
                 <Link to={`/study/${document.id}/flashcards`} className="flex-1 bg-[#0F7B6C] text-white text-center py-2 rounded-xl text-sm font-semibold">Study</Link>
-                <button onClick={() => onDelete(document.id)} className="bg-red-50 text-red-600 py-2 px-3 rounded-xl text-sm font-semibold">Delete</button>
+                <button onClick={() => window.confirm('Are you sure you want to delete this document?') && onDelete(document.id)} className="bg-red-50 text-red-600 py-2 px-3 rounded-xl text-sm font-semibold">Delete</button>
             </div>
         </div>
     );

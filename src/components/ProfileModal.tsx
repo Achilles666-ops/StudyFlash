@@ -4,7 +4,7 @@ import {
   X, User, Mail, GraduationCap, Compass, Layers, 
   Sparkles, LogOut, Check, Edit3, Shield, Loader2, Info 
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
 interface ProfileModalProps {
