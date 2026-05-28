@@ -127,7 +127,12 @@ export default {
     }
 
     // All other routes serve the frontend
-    return env.ASSETS.fetch(request)
+    let response = await env.ASSETS.fetch(request)
+    if (response.status === 404) {
+      // In case of a 404, fallback to index.html for React SPA router support
+      return env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request))
+    }
+    return response
   }
 }
 
