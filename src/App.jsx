@@ -13,43 +13,58 @@ import { OnboardingModal } from './components/OnboardingModal';
 function AppContent() {
   const { user, profile, loading } = useAuth();
 
-  // Show a gorgeous, centered StudyFlash logo & loader spin while determining authentication state
+  // Show the exact spinner design requested in FIX 2
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F8FAFB] flex flex-col items-center justify-center">
-        <div className="flex flex-col items-center">
-          <div className="flex items-center gap-2 text-[#0F7B6C] font-bold text-3xl mb-6 tracking-tight select-none">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
-            </svg>
-            StudyFlash
-          </div>
-          <div className="w-10 h-10 border-4 border-[#0F7B6C] border-t-transparent rounded-full animate-spin mb-3" />
-          <p className="text-sm font-semibold text-[#6B7280]">Verifying secure credentials...</p>
-        </div>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        flexDirection: 'column',
+        gap: '16px',
+        backgroundColor: '#F8FAFB'
+      }}>
+        <div style={{
+          width: '40px',
+          height: '40px',
+          border: '4px solid #E6F4F1',
+          borderTop: '4px solid #0F7B6C',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}/>
+        <p style={{ color: '#6B7280', fontFamily: 'sans-serif' }}>Loading StudyFlash...</p>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
 
+  // If user is NOT logged in → strictly show Login, absolutely bypassing any routes and redirects
+  if (!user) {
+    return <Login />;
+  }
+
   // If authenticated but no Firestore user profile document exists, block with friendly Onboarding modal
-  const showOnboarding = !!user && !profile;
+  const showOnboarding = !profile;
 
   return (
     <>
       <Routes>
-        {/* Public Login Route */}
-        <Route path="/" element={<Login />} />
+        {/* Render Dashboard at root / and /dashboard routes */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         
         {/* Secure Dashboard Route */}
         <Route 
           path="/dashboard" 
           element={
-            <ProtectedRoute>
-              <Layout>
-                <Dashboard />
-              </Layout>
-            </ProtectedRoute>
+            <Layout>
+              <Dashboard />
+            </Layout>
           } 
         />
 
@@ -57,11 +72,9 @@ function AppContent() {
         <Route 
           path="/library" 
           element={
-            <ProtectedRoute>
-              <Layout>
-                <Library />
-              </Layout>
-            </ProtectedRoute>
+            <Layout>
+              <Library />
+            </Layout>
           } 
         />
 
@@ -69,11 +82,9 @@ function AppContent() {
         <Route 
           path="/upload" 
           element={
-            <ProtectedRoute>
-              <Layout>
-                <Upload />
-              </Layout>
-            </ProtectedRoute>
+            <Layout>
+              <Upload />
+            </Layout>
           } 
         />
 
@@ -81,11 +92,9 @@ function AppContent() {
         <Route 
           path="/profile" 
           element={
-            <ProtectedRoute>
-              <Layout>
-                <Profile />
-              </Layout>
-            </ProtectedRoute>
+            <Layout>
+              <Profile />
+            </Layout>
           } 
         />
 
@@ -93,26 +102,22 @@ function AppContent() {
         <Route 
           path="/study/:documentId/:tab" 
           element={
-            <ProtectedRoute>
-              <Layout>
-                <Study />
-              </Layout>
-            </ProtectedRoute>
+            <Layout>
+              <Study />
+            </Layout>
           } 
         />
         <Route 
           path="/study/:documentId" 
           element={
-            <ProtectedRoute>
-              <Layout>
-                <Study />
-              </Layout>
-            </ProtectedRoute>
+            <Layout>
+              <Study />
+            </Layout>
           } 
         />
 
         {/* Catch-all Redirect */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
 
       {/* Global Onboarding Overlay if user exists but has not completed profile metadata setup */}

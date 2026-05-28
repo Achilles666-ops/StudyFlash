@@ -139,15 +139,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center">
-        <div className="w-10 h-10 border-4 border-brand-teal border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-sm font-semibold text-gray-400 select-none">Verifying secure academic credentials...</p>
-      </div>
-    );
-  }
-
   return (
     <AuthContext.Provider value={{ 
       user, 
