@@ -15,7 +15,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     try {
       setIsDropdownOpen(false);
       await logout();
-      navigate('/login');
+      navigate('/');
     } catch (error) {
       console.error('Error signing out:', error);
     }
