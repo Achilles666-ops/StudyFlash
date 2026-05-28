@@ -273,7 +273,7 @@ async function handleUpload(request, env, corsHeaders) {
 }
 
 // Resilient Gemini query helper with model fallbacks and exponential backoff
-async function callGeminiWithFallbackAndRetry(apiKey, primaryModel, body, fallbackModels = ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite']) {
+async function callGeminiWithFallbackAndRetry(apiKey, primaryModel, body, fallbackModels = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview']) {
   const models = Array.from(new Set([primaryModel, ...fallbackModels]));
   let lastError = null;
 
@@ -340,8 +340,8 @@ async function extractTextWithGemini(base64, mimeType, env) {
         contents: [{
           parts: [
             {
-              inline_data: {
-                mime_type: mimeType,
+              inlineData: {
+                mimeType: mimeType,
                 data: base64
               }
             },

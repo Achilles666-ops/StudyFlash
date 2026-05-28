@@ -29,7 +29,7 @@ async function callGeminiWithFallbackAndRetry(
   apiKey: string,
   primaryModel: string,
   body: any,
-  fallbackModels: string[] = ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite']
+  fallbackModels: string[] = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview']
 ): Promise<any> {
   // De-duplicate model names while keeping order of preference
   const models = Array.from(new Set([primaryModel, ...fallbackModels]));
@@ -101,8 +101,8 @@ async function extractTextWithGeminiVision(fileBuffer: Buffer, mimeType: string)
         contents: [{
           parts: [
             {
-              inline_data: {
-                mime_type: mimeType,
+              inlineData: {
+                mimeType: mimeType,
                 data: base64Data
               }
             },
