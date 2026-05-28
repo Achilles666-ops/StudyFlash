@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && echo '_worker.js' > dist/.assetsignore",
+    "build": "vite build && node -e \"require('fs').writeFileSync('dist/.assetsignore', '_worker.js\\n')\"",
     "preview": "vite preview"
   },
   "dependencies": {
