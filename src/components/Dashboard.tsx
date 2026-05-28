@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from './AuthProvider';
+import { Link } from 'react-router-dom';
+import { LogOut, User } from 'lucide-react';
 
 export const Dashboard = () => {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const [stats, setStats] = useState({ docs: 0, cards: 0 });
     const [loadingStats, setLoadingStats] = useState(false);
+
 
     useEffect(() => {
         if (!user) return;
@@ -32,6 +35,26 @@ export const Dashboard = () => {
 
     return (
         <div className="flex flex-col gap-8">
+            <div className="bg-white p-6 rounded-2xl border border-[#E5E7EB] shadow-sm">
+                <h2 className="text-lg font-bold mb-4">Account Actions</h2>
+                <div className="flex gap-4">
+                    <Link to="/profile" className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-semibold text-sm transition">
+                        <User className="w-4 h-4" />
+                        Profile Settings
+                    </Link>
+                    <button 
+                        onClick={() => {
+                            console.log("[Dashboard] Logout button clicked");
+                            logout();
+                        }} 
+                        className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-xl font-semibold text-sm transition"
+                    >
+                        <LogOut className="w-4 h-4" />
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+
             <div className="greeting">
                 <h1 className="text-2xl font-bold">
                     Welcome back, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'User'} 👋

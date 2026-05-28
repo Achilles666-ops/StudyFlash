@@ -11,6 +11,7 @@ import { Upload } from './components/Upload';
 import { Library } from './components/Library';
 import { Login } from './components/Login';
 import { Study } from './components/Study';
+import { Profile } from './components/Profile';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="/library" element={<ProtectedRoute><Library /></ProtectedRoute>} />
               <Route path="/study/:documentId" element={<ProtectedRoute><Study /></ProtectedRoute>} />
               <Route path="/study/:documentId/flashcards" element={<ProtectedRoute><Study /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/login" element={<Login />} />
             </Routes>
         </Layout>

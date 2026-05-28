@@ -267,13 +267,71 @@ async function handleUpload(request, env, corsHeaders) {
   }
 }
 
+// Resilient Gemini query helper with model fallbacks and exponential backoff
+async function callGeminiWithFallbackAndRetry(apiKey, primaryModel, body, fallbackModels = ['gemini-3.5-flash', 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash']) {
+  const models = Array.from(new Set([primaryModel, ...fallbackModels]));
+  let lastError = null;
+
+  for (const model of models) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    let attempt = 0;
+    const maxAttempts = 3;
+    let delay = 1000;
+
+    while (attempt < maxAttempts) {
+      try {
+        console.log(`[Gemini Worker Request] Querying model: ${model} (attempt ${attempt + 1}/${maxAttempts})...`);
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (response.status === 429 || response.status === 503 || response.status >= 500) {
+          const errText = await response.text();
+          console.warn(`[Gemini Worker Warning] Transient error ${response.status} for model ${model}: ${errText}. Retrying...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+          attempt++;
+          lastError = new Error(`Gemini API error ${response.status}: ${errText}`);
+          continue;
+        }
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Gemini API error ${response.status}: ${errText}`);
+        }
+
+        const data = await response.json();
+        if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          console.warn(`[Gemini Worker Warning] Model ${model} returned blank candidate structure:`, JSON.stringify(data));
+          throw new Error("Empty candidate response structure from Gemini.");
+        }
+
+        return data; // Success!
+
+      } catch (error) {
+        console.error(`[Gemini Worker Error] Attempt ${attempt + 1} failed for model ${model}:`, error.message);
+        lastError = error;
+        attempt++;
+        if (attempt < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+        }
+      }
+    }
+    console.warn(`[Gemini Worker Fallback] Model ${model} failed. Trying next fallback...`);
+  }
+
+  throw lastError || new Error("All candidate Gemini models failed.");
+}
+
 async function extractTextWithGemini(base64, mimeType, env) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+  try {
+    const result = await callGeminiWithFallbackAndRetry(
+      env.GEMINI_API_KEY,
+      'gemini-3.5-flash',
+      {
         contents: [{
           parts: [
             {
@@ -287,31 +345,26 @@ async function extractTextWithGemini(base64, mimeType, env) {
             }
           ]
         }]
-      })
-    }
-  )
+      }
+    );
 
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Gemini Vision failed: ${response.status} ${err}`)
+    return result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  } catch (error) {
+    console.error('Gemini Vision worker error:', error.message);
+    throw error;
   }
-
-  const data = await response.json()
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || ''
 }
 
 async function generateStudyMaterial(extractedText, env) {
   const truncated = extractedText.slice(0, 6000)
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+  const result = await callGeminiWithFallbackAndRetry(
+    env.GEMINI_API_KEY,
+    'gemini-3.5-flash',
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: `You are a university study assistant. 
+      contents: [{
+        parts: [{
+          text: `You are a university study assistant. 
 Read the content below and return ONLY a valid JSON object.
 No markdown, no backticks, no explanation. Just raw JSON.
 
@@ -340,27 +393,20 @@ Rules:
 
 Content:
 ${truncated}`
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 4096,
-          responseMimeType: "application/json"
-        }
-      })
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 4096,
+        responseMimeType: "application/json"
+      }
     }
-  )
+  );
 
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Gemini generation failed: ${response.status} ${err}`)
-  }
-
-  const data = await response.json()
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || ''
 
   if (!rawText.trim()) {
-    console.warn('Gemini empty response. Full response body:', JSON.stringify(data));
+    console.warn('Gemini empty response. Full response body:', JSON.stringify(result));
     throw new Error('Gemini returned an empty response. This can happen if the content was filtered by safety settings.');
   }
 

@@ -36,3 +36,13 @@ export interface SummaryNote {
   estimatedReadMins?: number;
   generatedAt?: any;
 }
+
+export interface UserProfile {
+  name: string;
+  email: string;
+  university: string;
+  fieldOfStudy: string;
+  plan: 'free' | 'pro';
+  uploadCount: number;
+  createdAt: any;
+}
