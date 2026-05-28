@@ -273,7 +273,7 @@ async function handleUpload(request, env, corsHeaders) {
 }
 
 // Resilient Gemini query helper with model fallbacks and exponential backoff
-async function callGeminiWithFallbackAndRetry(apiKey, primaryModel, body, fallbackModels = ['gemini-3.5-flash', 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash']) {
+async function callGeminiWithFallbackAndRetry(apiKey, primaryModel, body, fallbackModels = ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite']) {
   const models = Array.from(new Set([primaryModel, ...fallbackModels]));
   let lastError = null;
 
@@ -360,6 +360,40 @@ async function extractTextWithGemini(base64, mimeType, env) {
   }
 }
 
+// Helper to parse Gemini JSON responses cleanly with fallback strategies
+function parseGeminiJSON(rawText) {
+  if (!rawText || !rawText.trim()) {
+    throw new Error("Gemini returned an empty response. This can happen if the content was filtered by safety settings.");
+  }
+
+  // 1. Clean common markdown wrappers
+  let cleaned = rawText.trim();
+  cleaned = cleaned.replace(/^```json\s*/i, "");
+  cleaned = cleaned.replace(/^```\s*/, "");
+  cleaned = cleaned.replace(/\s*```$/g, "");
+  cleaned = cleaned.trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.warn("[JSON Parser] Simple cleanup failed, attempting brace-matching extraction...", err);
+  }
+
+  // 2. Locate first '{' and last '}' to isolate JSON block
+  const firstBrace = rawText.indexOf("{");
+  const lastBrace = rawText.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    const candidate = rawText.slice(firstBrace, lastBrace + 1);
+    try {
+      return JSON.parse(candidate);
+    } catch (err) {
+      console.warn("[JSON Parser] Brace extraction failed.", err);
+    }
+  }
+
+  throw new Error("Gemini returned invalid JSON. Cannot parse study material.");
+}
+
 async function generateStudyMaterial(extractedText, env) {
   const truncated = extractedText.slice(0, 6000)
 
@@ -369,59 +403,72 @@ async function generateStudyMaterial(extractedText, env) {
     {
       contents: [{
         parts: [{
-          text: `You are a university study assistant. 
-Read the content below and return ONLY a valid JSON object.
-No markdown, no backticks, no explanation. Just raw JSON.
+          text: `You are a university study assistant. Read the lecture content below and structure it into study flashcards and concise summary notes.
 
-Return this exact structure:
-{
-  "flashcards": [
-    { "question": "...", "answer": "...", "difficulty": "easy" }
-  ],
-  "summary": {
-    "sections": [
-      { "heading": "...", "bullets": ["...", "..."] }
-    ],
-    "keyTerms": ["...", "..."],
-    "estimatedReadMins": 5
-  }
-}
-
-Rules:
-- Generate up to 20 flashcards
-- Each flashcard: clear question, concise answer, 
-  difficulty easy/medium/hard
-- Generate 4 to 8 summary sections
-- Each section: heading + 3 to 6 bullet points
-- Up to 10 key terms
-- Estimated reading time as integer
-
-Content:
+Lecture content:
 ${truncated}`
         }]
       }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 4096,
-        responseMimeType: "application/json"
+        maxOutputTokens: 4000,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            flashcards: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  question: { type: "STRING", description: "Clear, direct study question" },
+                  answer: { type: "STRING", description: "Concise educational answer" },
+                  difficulty: { type: "STRING", description: "Either 'easy', 'medium', or 'hard'" }
+                },
+                required: ["question", "answer", "difficulty"]
+              },
+              description: "Up to 20 well-structured study flashcards"
+            },
+            summary: {
+              type: "OBJECT",
+              properties: {
+                sections: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      heading: { type: "STRING", description: "Clean topic heading" },
+                      bullets: {
+                        type: "ARRAY",
+                        items: { type: "STRING" },
+                        description: "3 to 6 key bullet points detailing this section"
+                      }
+                    },
+                    required: ["heading", "bullets"]
+                  },
+                  description: "4 to 8 summary notes sections"
+                },
+                keyTerms: {
+                  type: "ARRAY",
+                  items: { type: "STRING" },
+                  description: "Up to 10 prominent key academic terms found in the material"
+                },
+                estimatedReadMins: {
+                  type: "INTEGER",
+                  description: "Estimated reading time for the summary notes in minutes"
+                }
+              },
+              required: ["sections", "keyTerms", "estimatedReadMins"]
+            }
+          },
+          required: ["flashcards", "summary"]
+        }
       }
     }
   );
 
   const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || ''
-
-  if (!rawText.trim()) {
-    console.warn('Gemini empty response. Full response body:', JSON.stringify(result));
-    throw new Error('Gemini returned an empty response. This can happen if the content was filtered by safety settings.');
-  }
-
-  try {
-    const cleaned = rawText.replace(/```json|```/g, '').trim()
-    return JSON.parse(cleaned)
-  } catch (e) {
-    console.error('JSON parse failed. Raw:', rawText.slice(0, 500))
-    throw new Error('Gemini returned invalid JSON. Cannot parse study material.')
-  }
+  return parseGeminiJSON(rawText);
 }
 
 async function saveToFirestore(userId, fileName, subject, 
@@ -904,49 +951,51 @@ async function handleGenerateQuiz(documentId, env, corsHeaders) {
     }
   }
 
-  const prompt = `Based on these study questions, generate a multiple-choice quiz of up to 10 questions. For each question, provide 4 options, a correct answer, and an explanation.
-
-Return ONLY a valid JSON object with the following structure:
-{
-  "questions": [
-    {
-      "question": "...",
-      "options": ["...", "...", "...", "..."],
-      "correctAnswer": "...",
-      "explanation": "..."
-    }
-  ]
-}
+  const prompt = `Based on these study questions, generate a multiple-choice quiz of up to 10 questions. Exactly 4 options must be provided for each question, one of which must be the correct answer.
 
 Study questions data:
 ${JSON.stringify(cards.slice(0, 20))}`;
 
-  const geminiResponse = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+  const geminiResult = await callGeminiWithFallbackAndRetry(
+    env.GEMINI_API_KEY,
+    'gemini-3.5-flash',
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 2048
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 2048,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            questions: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  question: { type: "STRING", description: "The multiple-choice quiz query/question" },
+                  options: {
+                    type: "ARRAY",
+                    items: { type: "STRING" },
+                    description: "Exactly 4 options"
+                  },
+                  correctAnswer: { type: "STRING", description: "The correct option string" },
+                  explanation: { type: "STRING", description: "Explanation of why this option is correct" }
+                },
+                required: ["question", "options", "correctAnswer", "explanation"]
+              }
+            }
+          },
+          required: ["questions"]
         }
-      })
+      }
     }
   );
 
-  if (!geminiResponse.ok) {
-    const errText = await geminiResponse.text();
-    throw new Error(`Gemini generate content failed: ${geminiResponse.status} ${errText}`);
-  }
-
-  const geminiData = await geminiResponse.json();
-  const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  const cleaned = rawText.replace(/```json|```/g, '').trim();
-  const quiz = JSON.parse(cleaned);
+  const rawText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const quiz = parseGeminiJSON(rawText);
 
   return Response.json(quiz, { headers: corsHeaders });
 }
